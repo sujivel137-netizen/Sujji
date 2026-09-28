@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        EduGenie - AI Learning Assistant
+    </title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', path='style.css') }}"
+    >
+
+</head>
+
+
+<body>
+
+<main class="container">
+
+
+    <section class="hero">
+
+        <div class="badge">
+            EduGenie • AI Learning Assistant
+        </div>
+
+        <h1>
+            Learn smarter with EduGenie
+        </h1>
+
+        <p>
+            Ask questions, explain concepts,
+            generate quizzes, summarize notes,
+            and create learning paths.
+        </p>
+
+    </section>
+
+
+    <section class="card">
+
+
+        <label for="task">
+            Choose a task
+        </label>
+
+
+        <select id="task">
+
+            <option value="qa">
+                Q&amp;A
+            </option>
+
+            <option value="explain">
+                Explain a concept
+            </option>
+
+            <option value="quiz">
+                Generate quiz
+            </option>
+
+            <option value="summarize">
+                Summarize notes
+            </option>
+
+            <option value="learn">
+                Learning path
+            </option>
+
+        </select>
+
+
+        <label
+            id="inputLabel"
+            for="inputText"
+        >
+            Your question
+        </label>
+
+
+        <textarea
+            id="inputText"
+            placeholder="Example: What is recursion?"
+        ></textarea>
+
+
+        <div
+            id="levelWrap"
+            class="hidden"
+        >
+
+            <label for="level">
+                Learning level
+            </label>
+
+            <select id="level">
+
+                <option value="beginner">
+                    Beginner
+                </option>
+
+                <option value="intermediate">
+                    Intermediate
+                </option>
+
+                <option value="advanced">
+                    Advanced
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <div
+            id="quizCountWrap"
+            class="hidden"
+        >
+
+            <label for="quizCount">
+                Number of questions
+            </label>
+
+            <input
+                id="quizCount"
+                type="number"
+                min="1"
+                max="10"
+                value="5"
+            >
+
+        </div>
+
+
+        <button
+            id="runBtn"
+            type="button"
+        >
+            Run EduGenie
+        </button>
+
+
+        <div
+            id="status"
+            class="status"
+        ></div>
+
+
+        <section
+            id="result"
+            class="result hidden"
+        ></section>
+
+
+    </section>
+
+
+    <footer>
+        EduGenie • FastAPI • Google Gemini
+    </footer>
+
+
+</main>
+
+
+<script>
+
+const task =
+    document.getElementById("task");
+
+const input =
+    document.getElementById("inputText");
+
+const label =
+    document.getElementById("inputLabel");
+
+const levelWrap =
+    document.getElementById("levelWrap");
+
+const quizCountWrap =
+    document.getElementById("quizCountWrap");
+
+const runBtn =
+    document.getElementById("runBtn");
+
+const statusBox =
+    document.getElementById("status");
+
+const result =
+    document.getElementById("result");
+
+
+const labels = {
+
+    qa: "Your question",
+
+    explain: "Concept to explain",
+
+    quiz: "Passage / study text",
+
+    summarize: "Text to summarize",
+
+    learn: "Topic to learn"
+
+};
+
+
+const placeholders = {
+
+    qa:
+        "Example: Which is the largest ocean?",
+
+    explain:
+        "Example: Explain recursion in simple terms.",
+
+    quiz:
+        "Paste your study notes or textbook passage here.",
+
+    summarize:
+        "Paste the notes you want to summarize.",
+
+    learn:
+        "Example: Python"
+
+};
+
+
+function updateForm() {
+
+    const value =
+        task.value;
+
+    levelWrap.classList.toggle(
+        "hidden",
+        value !== "learn"
+    );
+
+    quizCountWrap.classList.toggle(
+        "hidden",
+        value !== "quiz"
+    );
+
+    label.textContent =
+        labels[value];
+
+    input.placeholder =
+        placeholders[value];
+
+}
+
+
+function escapeHtml(value) {
+
+    return String(value)
+
+        .replaceAll(
+            "&",
+            "&amp;"
+        )
+
+        .replaceAll(
+            "<",
+            "&lt;"
+        )
+
+        .replaceAll(
+            ">",
+            "&gt;"
+        )
+
+        .replaceAll(
+            '"',
+            "&quot;"
+        )
+
+        .replaceAll(
+            "'",
+            "&#039;"
+        );
+
+}
+
+
+function renderText(text) {
+
+    return escapeHtml(text)
+
+        .split("\n")
+
+        .map(line =>
+
+            line.trim()
+                ? `<p>${line}</p>`
+                : ""
+
+        )
+
+        .join("");
+
+}
+
+
+function renderQuiz(questions) {
+
+    return questions.map(
+        (q, i) => `
+
+        <article class="quiz-card">
+
+            <h3>
+                ${i + 1}.
+                ${escapeHtml(q.question)}
+            </h3>
+
+            <ol type="A">
+
+                ${q.options
+                    .map(
+                        option =>
+                            `<li>
+                                ${escapeHtml(option)}
+                             </li>`
+                    )
+                    .join("")
+                }
+
+            </ol>
+
+            <p>
+                <strong>Answer:</strong>
+                ${escapeHtml(q.correct_answer)}
+            </p>
+
+            ${
+                q.explanation
+                    ? `
+                    <p>
+                        <strong>Why:</strong>
+                        ${escapeHtml(q.explanation)}
+                    </p>
+                    `
+                    : ""
+            }
+
+        </article>
+
+    `
+    ).join("");
+
+}
+
+
+async function runTask() {
+
+    const value =
+        input.value.trim();
+
+
+    if (!value) {
+
+        statusBox.textContent =
+            "Please enter some text first.";
+
+        return;
+
+    }
+
+
+    runBtn.disabled =
+        true;
+
+    statusBox.textContent =
+        "Thinking...";
+
+    result.classList.add(
+        "hidden"
+    );
+
+
+    let endpoint;
+
+    let body;
+
+
+    switch (task.value) {
+
+
+        case "qa":
+
+            endpoint = "/qa";
+
+            body = {
+                question: value
+            };
+
+            break;
+
+
+        case "explain":
+
+            endpoint = "/explain";
+
+            body = {
+                text: value
+            };
+
+            break;
+
+
+        case "quiz":
+
+            endpoint = "/quiz";
+
+            body = {
+
+                text: value,
+
+                count: Number(
+                    document
+                        .getElementById("quizCount")
+                        .value || 5
+                )
+
+            };
+
+            break;
+
+
+        case "summarize":
+
+            endpoint =
+                "/summarize";
+
+            body = {
+                text: value
+            };
+
+            break;
+
+
+        default:
+
+            endpoint =
+                "/learn/recommendations";
+
+            body = {
+
+                topic: value,
+
+                level:
+                    document
+                        .getElementById("level")
+                        .value
+
+            };
+
+    }
+
+
+    try {
+
+
+        const response =
+            await fetch(
+
+                endpoint,
+
+                {
+
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body:
+                        JSON.stringify(body)
+
+                }
+
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                data.detail ||
+                "Request failed."
+            );
+
+        }
+
+
+        if (task.value === "quiz") {
+
+            result.innerHTML =
+                renderQuiz(data.quiz);
+
+        }
+
+        else {
+
+            const text =
+                data.answer ||
+                data.explanation ||
+                data.summary ||
+                data.recommendations;
+
+            result.innerHTML =
+                renderText(text);
+
+        }
+
+
+        result.classList.remove(
+            "hidden"
+        );
+
+
+        statusBox.textContent =
+            "Done ✓";
+
+
+    }
+
+    catch (error) {
+
+
+        result.innerHTML =
+            `<p class="error">
+                ${escapeHtml(error.message)}
+            </p>`;
+
+
+        result.classList.remove(
+            "hidden"
+        );
+
+
+        statusBox.textContent =
+            "Error";
+
+
+    }
+
+    finally {
+
+        runBtn.disabled =
+            false;
+
+    }
+
+}
+
+
+task.addEventListener(
+    "change",
+    updateForm
+);
+
+
+runBtn.addEventListener(
+    "click",
+    runTask
+);
+
+
+updateForm();
+
+</script>
+
+</body>
+
+</html>
